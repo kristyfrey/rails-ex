@@ -1,0 +1,656 @@
+{
+  "kind": "Template",
+  "apiVersion": "v1",
+  "metadata": {
+    "name": "rails-mysql",
+    "annotations": {
+      "openshift.io/display-name": "Rails + MySQL",
+      "description": "An example Rails application with a MySQL database.",
+      "tags": "quickstart,ruby,rails",
+      "iconClass": "icon-ruby",
+      "openshift.io/long-description": "This template defines resources needed to develop a Rails application, including a build configuration, application deployment configuration, and database deployment configuration.",
+      "template.openshift.io/bindable": "false"
+    }
+  },
+  "message": "The following service(s) have been created in your project: ${NAME}, dbs-${NAME}.\n\nFor more information about using this template, including OpenShift considerations, see https://github.com/sclorg/rails-ex/blob/master/README.md.",
+  "labels": {
+      "template": "rails-mysql",
+      "app": "${NAME}"
+  },
+  "objects": [
+    {
+      "kind": "Secret",
+      "apiVersion": "v1",
+      "metadata": {
+        "name": "${NAME}"
+      },
+      "stringData" : {
+        "database-user" : "${MYSQL_USER}",
+        "database-password" : "${MYSQL_PASSWORD}",
+        "database-root-password" : "${MYSQL_ROOT_PASSWORD}",
+        "application-user" : "${APPLICATION_USER}",
+        "application-password" : "${APPLICATION_PASSWORD}",
+        "keybase" : "${SECRET_KEY_BASE}"
+      }
+    },
+    {
+      "kind": "Service",
+      "apiVersion": "v1",
+      "metadata": {
+        "name": "${NAME}",
+        "annotations": {
+          "description": "Exposes and load balances the application pods",
+          "service.alpha.openshift.io/dependencies": "[{\"name\": \"dbs-${NAME}\", \"kind\": \"Service\"}]"
+        }
+      },
+      "spec": {
+        "ports": [
+          {
+            "name": "web",
+            "port": 8080,
+            "targetPort": 8080
+          }
+        ],
+        "selector": {
+          "name": "${NAME}"
+        }
+      }
+    },
+    {
+      "kind": "Route",
+      "apiVersion": "v1",
+      "metadata": {
+        "name": "${NAME}"
+      },
+      "spec": {
+        "host": "${APPLICATION_DOMAIN}",
+        "to": {
+          "kind": "Service",
+          "name": "${NAME}"
+        }
+      }
+    },
+    {
+      "kind": "ImageStream",
+      "apiVersion": "v1",
+      "metadata": {
+        "name": "${NAME}",
+        "annotations": {
+          "description": "Keeps track of changes in the application image"
+        }
+      }
+    },
+    {
+      "kind": "BuildConfig",
+      "apiVersion": "v1",
+      "metadata": {
+        "name": "${NAME}",
+        "annotations": {
+          "description": "Defines how to build the application",
+          "template.alpha.openshift.io/wait-for-ready": "true"
+        }
+      },
+      "spec": {
+        "source": {
+          "type": "Git",
+          "git": {
+            "uri": "${SOURCE_REPOSITORY_URL}",
+            "ref": "${SOURCE_REPOSITORY_REF}"
+          },
+          "contextDir": "${CONTEXT_DIR}"
+        },
+        "strategy": {
+          "type": "Source",
+          "sourceStrategy": {
+            "from": {
+              "kind": "ImageStreamTag",
+              "namespace": "${NAMESPACE}",
+              "name": "ruby:${RUBYGEM_VERSION}"
+            },
+            "env": [
+              {
+                "name": "RUBYGEM_MIRROR",
+                "value": "${RUBYGEM_MIRROR}"
+              }
+            ]
+          }
+        },
+        "output": {
+          "to": {
+            "kind": "ImageStreamTag",
+            "name": "${NAME}:latest"
+          }
+        },
+        "triggers": [
+          {
+            "type": "ImageChange"
+          },
+          {
+            "type": "ConfigChange"
+          },
+          {
+            "type": "GitHub",
+            "github": {
+              "secret": "${GITHUB_WEBHOOK_SECRET}"
+            }
+          }
+        ],
+        "postCommit": {
+          "script": "bundle exec rake test"
+        }
+      }
+    },
+    {
+      "kind": "DeploymentConfig",
+      "apiVersion": "v1",
+      "metadata": {
+        "name": "${NAME}",
+        "annotations": {
+          "description": "Defines how to deploy the application server",
+          "template.alpha.openshift.io/wait-for-ready": "true"
+        }
+      },
+      "spec": {
+        "strategy": {
+          "type": "Recreate",
+          "recreateParams": {
+            "pre": {
+              "failurePolicy": "Abort",
+              "execNewPod": {
+                "command": [
+                  "./migrate-database.sh"
+                ],
+                "containerName": "${NAME}"
+              }
+            }
+          }
+        },
+        "triggers": [
+          {
+            "type": "ImageChange",
+            "imageChangeParams": {
+              "automatic": true,
+              "containerNames": [
+                "${NAME}"
+              ],
+              "from": {
+                "kind": "ImageStreamTag",
+                "name": "${NAME}:latest"
+              }
+            }
+          },
+          {
+            "type": "ConfigChange"
+          }
+        ],
+        "replicas": 1,
+        "selector": {
+          "name": "${NAME}"
+        },
+        "template": {
+          "metadata": {
+            "name": "${NAME}",
+            "labels": {
+              "name": "${NAME}"
+            }
+          },
+          "spec": {
+            "containers": [
+              {
+                "name": "${NAME}",
+                "image": " ",
+                "ports": [
+                  {
+                    "containerPort": 8080
+                  }
+                ],
+                "readinessProbe": {
+                  "timeoutSeconds": 3,
+                  "initialDelaySeconds": 5,
+                  "httpGet": {
+                    "path": "/articles",
+                    "port": 8080
+                  }
+                },
+                "livenessProbe": {
+                  "timeoutSeconds": 3,
+                  "initialDelaySeconds": 10,
+                  "httpGet": {
+                    "path": "/articles",
+                    "port": 8080
+                  }
+                },
+                "env": [
+                  {
+                    "name": "MYSQL_SERVICE_NAME",
+                    "value": "dbs-${NAME}"
+                  },
+                  {
+                    "name": "MYSQL_USER",
+                    "valueFrom": {
+                      "secretKeyRef" : {
+                        "name" : "${NAME}",
+                        "key" : "database-user"
+                      }
+                    }
+                  },
+                  {
+                    "name": "MYSQL_PASSWORD",
+                    "valueFrom": {
+                      "secretKeyRef" : {
+                        "name" : "${NAME}",
+                        "key" : "database-password"
+                      }
+                    }
+                  },
+                  {
+                    "name": "MYSQL_ROOT_PASSWORD",
+                    "valueFrom": {
+                      "secretKeyRef" : {
+                        "name" : "${NAME}",
+                        "key" : "database-root-password"
+                      }
+                    }
+                  },
+                  {
+                    "name": "SECRET_KEY_BASE",
+                    "valueFrom": {
+                      "secretKeyRef" : {
+                        "name" : "${NAME}",
+                        "key" : "keybase"
+                      }
+                    }
+                  },
+                  {
+                    "name": "MYSQL_DATABASE",
+                    "value": "${MYSQL_NAME}"
+                  },
+                  {
+                    "name": "MYSQL_MAX_CONNECTIONS",
+                    "value": "${MYSQL_MAX_CONNECTIONS}"
+                  },
+                  {
+                    "name": "MYSQL_SHARED_BUFFERS",
+                    "value": "${MYSQL_SHARED_BUFFERS}"
+                  },
+                  {
+                    "name": "APPLICATION_DOMAIN",
+                    "value": "${APPLICATION_DOMAIN}"
+                  },
+                  {
+                    "name": "APPLICATION_USER",
+                    "valueFrom": {
+                      "secretKeyRef" : {
+                        "name" : "${NAME}",
+                        "key" : "application-user"
+                      }
+                    }
+                  },
+                  {
+                    "name": "APPLICATION_PASSWORD",
+                    "valueFrom": {
+                      "secretKeyRef" : {
+                        "name" : "${NAME}",
+                        "key" : "application-password"
+                      }
+                    }
+                  },
+                  {
+                    "name": "RAILS_ENV",
+                    "value": "${RAILS_ENV}"
+                  }
+                ],
+                "resources": {
+                  "limits": {
+                    "memory": "${MEMORY_LIMIT}"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+
+  {
+    "apiVersion": "v1",
+    "kind": "Secret",
+    "metadata": {
+        "annotations": {
+            "template.openshift.io/expose-database_name": "{.data['database-name']}",
+            "template.openshift.io/expose-password": "{.data['database-password']}",
+            "template.openshift.io/expose-root_password": "{.data['database-root-password']}",
+            "template.openshift.io/expose-username": "{.data['database-user']}"
+        },
+        "name": "dbs-${NAME}"
+    },
+    "stringData": {
+        "database-name": "${MYSQL_DATABASE}",
+        "database-password": "${MYSQL_PASSWORD}",
+        "database-root-password": "${MYSQL_ROOT_PASSWORD}",
+        "database-user": "${MYSQL_USER}"
+    }
+},
+{
+    "apiVersion": "v1",
+    "kind": "Service",
+    "metadata": {
+        "annotations": {
+            "template.openshift.io/expose-uri": "mysql://{.spec.clusterIP}:{.spec.ports[?(.name==\"mysql\")].port}"
+        },
+        "name": "dbs-${NAME}"
+    },
+    "spec": {
+        "ports": [
+            {
+                "name": "mysql",
+                "port": 3306
+            }
+        ],
+        "selector": {
+            "name": "dbs-${NAME}"
+        }
+    }
+},
+{
+    "apiVersion": "v1",
+    "kind": "PersistentVolumeClaim",
+    "metadata": {
+        "name": "dbs-${NAME}"
+    },
+    "spec": {
+        "accessModes": [
+            "ReadWriteOnce"
+        ],
+        "resources": {
+            "requests": {
+                "storage": "${VOLUME_CAPACITY}"
+            }
+        }
+    }
+},
+{
+    "apiVersion": "v1",
+    "kind": "DeploymentConfig",
+    "metadata": {
+        "annotations": {
+            "template.alpha.openshift.io/wait-for-ready": "true"
+        },
+        "name": "dbs-${NAME}"
+    },
+    "spec": {
+        "replicas": 1,
+        "selector": {
+            "name": "dbs-${NAME}"
+        },
+        "strategy": {
+            "type": "Recreate"
+        },
+        "template": {
+            "metadata": {
+                "labels": {
+                    "name": "dbs-${NAME}"
+                }
+            },
+            "spec": {
+                "containers": [
+                    {
+                        "env": [
+                            {
+                                "name": "MYSQL_USER",
+                                "valueFrom": {
+                                    "secretKeyRef": {
+                                        "key": "database-user",
+                                        "name": "dbs-${NAME}"
+                                    }
+                                }
+                            },
+                            {
+                                "name": "MYSQL_PASSWORD",
+                                "valueFrom": {
+                                    "secretKeyRef": {
+                                        "key": "database-password",
+                                        "name": "dbs-${NAME}"
+                                    }
+                                }
+                            },
+                            {
+                                "name": "MYSQL_ROOT_PASSWORD",
+                                "valueFrom": {
+                                    "secretKeyRef": {
+                                        "key": "database-root-password",
+                                        "name": "dbs-${NAME}"
+                                    }
+                                }
+                            },
+                            {
+                                "name": "MYSQL_DATABASE",
+                                "valueFrom": {
+                                    "secretKeyRef": {
+                                        "key": "database-name",
+                                        "name": "dbs-${NAME}"
+                                    }
+                                }
+                            }
+                        ],
+                        "image": " ",
+                        "imagePullPolicy": "IfNotPresent",
+                        "livenessProbe": {
+                            "initialDelaySeconds": 30,
+                            "tcpSocket": {
+                                "port": 3306
+                            },
+                            "timeoutSeconds": 1
+                        },
+                        "name": "mysql",
+                        "ports": [
+                            {
+                                "containerPort": 3306
+                            }
+                        ],
+                        "readinessProbe": {
+                            "exec": {
+                                "command": [
+                                    "/bin/sh",
+                                    "-i",
+                                    "-c",
+                                    "MYSQL_PWD=\"$MYSQL_PASSWORD\" mysql -h 127.0.0.1 -u $MYSQL_USER -D $MYSQL_DATABASE -e 'SELECT 1'"
+                                ]
+                            },
+                            "initialDelaySeconds": 5,
+                            "timeoutSeconds": 1
+                        },
+                        "resources": {
+                            "limits": {
+                                "memory": "${MEMORY_LIMIT}"
+                            }
+                        },
+                        "volumeMounts": [
+                            {
+                                "mountPath": "/var/lib/mysql/data",
+                                "name": "dbs-${NAME}-data"
+                            }
+                        ]
+                    }
+                ],
+                "volumes": [
+                    {
+                        "name": "dbs-${NAME}-data",
+                        "persistentVolumeClaim": {
+                            "claimName": "dbs-${NAME}"
+                        }
+                    }
+                ]
+            }
+        },
+        "triggers": [
+            {
+                "imageChangeParams": {
+                    "automatic": true,
+                    "containerNames": [
+                        "mysql"
+                    ],
+                    "from": {
+                        "kind": "ImageStreamTag",
+                        "name": "mysql:${MYSQL_VERSION}",
+                        "namespace": "${NAMESPACE}"
+                    }
+                },
+                "type": "ImageChange"
+            },
+            {
+                "type": "ConfigChange"
+            }
+        ]
+    }
+}
+],
+
+
+  "parameters": [
+    {
+      "name": "NAME",
+      "displayName": "Name",
+      "description": "The name assigned to all of the frontend objects defined in this template.",
+      "required": true,
+      "value": "rails-mysql"
+    },
+    {
+      "name": "NAMESPACE",
+      "displayName": "Namespace",
+      "required": true,
+      "description": "The OpenShift Namespace where the Ruby and MySQL ImageStreams reside.",
+      "value": "openshift"
+    },
+    {
+      "name": "MEMORY_LIMIT",
+      "displayName": "Memory Limit",
+      "required": true,
+      "description": "Maximum amount of memory the Rails container can use.",
+      "value": "512Mi"
+    },
+    {
+      "name": "SOURCE_REPOSITORY_URL",
+      "displayName": "Git Repository URL",
+      "required": true,
+      "description": "The URL of the repository with your application source code.",
+      "value": "https://github.com/sclorg/rails-ex.git"
+    },
+    {
+      "name": "SOURCE_REPOSITORY_REF",
+      "displayName": "Git Reference",
+      "description": "Set this to a branch name, tag or other ref of your repository if you are not using the default branch."
+    },
+    {
+      "name": "CONTEXT_DIR",
+      "displayName": "Context Directory",
+      "description": "Set this to the relative path to your project if it is not in the root of your repository."
+    },
+    {
+      "name": "APPLICATION_DOMAIN",
+      "displayName": "Application Hostname",
+      "description": "The exposed hostname that will route to the Rails service, if left blank a value will be defaulted.",
+      "value": ""
+    },
+    {
+      "name": "GITHUB_WEBHOOK_SECRET",
+      "displayName": "GitHub Webhook Secret",
+      "description": "Github trigger secret.  A difficult to guess string encoded as part of the webhook URL.  Not encrypted.",
+      "generate": "expression",
+      "from": "[a-zA-Z0-9]{40}"
+    },
+    {
+      "name": "SECRET_KEY_BASE",
+      "displayName": "Secret Key",
+      "description": "Your secret key for verifying the integrity of signed cookies.",
+      "generate": "expression",
+      "from": "[a-z0-9]{127}"
+    },
+    {
+      "name": "APPLICATION_USER",
+      "displayName": "Application Username",
+      "required": true,
+      "description": "The application user that is used within the sample application to authorize access on pages.",
+      "value": "openshift"
+    },
+    {
+      "name": "APPLICATION_PASSWORD",
+      "displayName": "Application Password",
+      "required": true,
+      "description": "The application password that is used within the sample application to authorize access on pages.",
+      "value": "secret"
+    },
+    {
+      "name": "RAILS_ENV",
+      "displayName": "Rails Environment",
+      "required": true,
+      "description": "Environment under which the sample application will run. Could be set to production, development or test.",
+      "value": "development"
+    },
+    {
+      "name": "RUBY_VERSION",
+      "displayName": "Ruby Version",
+      "description": "Ruby Version",
+      "value": "2.5"
+    },
+    {
+      "name": "RUBYGEM_MIRROR",
+      "displayName": "Custom RubyGems Mirror URL",
+      "description": "The custom RubyGems mirror URL",
+      "value": ""
+    },    
+    {
+      "description": "Maximum amount of memory the container can use.",
+      "displayName": "Memory Limit",
+      "name": "MEMORY_LIMIT",
+      "required": true,
+      "value": "512Mi"
+  },
+  {
+      "description": "Username for MySQL user that will be used for accessing the database.",
+      "displayName": "MySQL Connection Username",
+      "from": "user[A-Z0-9]{3}",
+      "generate": "expression",
+      "name": "MYSQL_USER",
+      "required": true
+  },
+  {
+      "description": "Password for the MySQL connection user.",
+      "displayName": "MySQL Connection Password",
+      "from": "[a-zA-Z0-9]{16}",
+      "generate": "expression",
+      "name": "MYSQL_PASSWORD",
+      "required": true
+  },
+  {
+      "description": "Password for the MySQL root user.",
+      "displayName": "MySQL root user Password",
+      "from": "[a-zA-Z0-9]{16}",
+      "generate": "expression",
+      "name": "MYSQL_ROOT_PASSWORD",
+      "required": true
+  },
+  {
+      "description": "Name of the MySQL database accessed.",
+      "displayName": "MySQL Database Name",
+      "name": "MYSQL_DATABASE",
+      "required": true,
+      "value": "sampledb"
+  },
+  {
+      "description": "Volume space available for data, e.g. 512Mi, 2Gi.",
+      "displayName": "Volume Capacity",
+      "name": "VOLUME_CAPACITY",
+      "required": true,
+      "value": "2Gi"
+  },
+  {
+      "description": "Version of MySQL image to be used (5.7, or latest).",
+      "displayName": "Version of MySQL Image",
+      "name": "MYSQL_VERSION",
+      "required": true,
+      "value": "5.7"
+  }
+
+  ]
+}

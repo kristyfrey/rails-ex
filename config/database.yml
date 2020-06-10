@@ -1,7 +1,7 @@
 # PostgreSQL. Versions 8.2 and up are supported.
 
-<% user = ENV.key?("MYSQL_ROOT_PASSWORD") ? "root" : ENV["MYSQL_USER"] %>
-<% password = ENV.key?("MYSQL_ROOT_PASSWORD") ? ENV["MYSQL_ROOT_PASSWORD"] : ENV["MYSQL_PASSWORD"] %>
+<% user = ENV.key?("DATABASE_ROOT_PASSWORD") ? "root" : ENV["DATABASE_USER"] %>
+<% password = ENV.key?("DATABASE_ROOT_PASSWORD") ? ENV["DATABASE_ROOT_PASSWORD"] : ENV["DATABASE_PASSWORD"] %>
 <% db_service = ENV.fetch("DATABASE_SERVICE_NAME","").upcase %>
 
 default: &default
@@ -14,7 +14,7 @@ default: &default
   password: <%= password %>
   host: <%= ENV["#{db_service}_SERVICE_HOST"] %>
   port: <%= ENV["#{db_service}_SERVICE_PORT"] %>
-  database: <%= ENV["MYSQL_DATABASE"] %>
+  database: <%= ENV["DATABASE_NAME"] %>
 
 development:
   <<: *default

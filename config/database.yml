@@ -2,7 +2,7 @@
 
 <% user = ENV.key?("MYSQL_ROOT_PASSWORD") ? "root" : ENV["MYSQL_USER"] %>
 <% password = ENV.key?("MYSQL_ROOT_PASSWORD") ? ENV["MYSQL_ROOT_PASSWORD"] : ENV["MYSQL_PASSWORD"] %>
-<% db_service = ENV.fetch("MYSQL_SERVICE_NAME","").upcase %>
+<% db_service = ENV.fetch("DATABASE_SERVICE_NAME","").upcase %>
 
 default: &default
   adapter: mysql2

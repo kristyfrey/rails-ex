@@ -466,20 +466,30 @@
                             }
                         },
                         "volumeMounts": [
-                            {
-                                "mountPath": "/var/lib/mysql/data",
-                                "name": "dbs-${NAME}-data"
-                            }
+                          {
+                              "mountPath": "/var/lib/mysql/data",
+                              "name": "dbdata-${NAME}"
+                          },
+                          {
+                              "mountPath": "/var/www/${NAME}/shared",
+                              "name": "shared-${NAME}"
+                          }
                         ]
                     }
                 ],
                 "volumes": [
-                    {
-                        "name": "dbs-${NAME}-data",
-                        "persistentVolumeClaim": {
-                            "claimName": "dbs-${NAME}"
-                        }
-                    }
+                  {
+                      "name": "dbdata-${NAME}",
+                      "persistentVolumeClaim": {
+                          "claimName": "dbs-${NAME}"
+                      }
+                  },
+                  {
+                      "name": "shared-${NAME}",
+                      "persistentVolumeClaim": {
+                          "claimName": "shared-${NAME}"
+                      }
+                  }
                 ]
             }
         },

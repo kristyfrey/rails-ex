@@ -10,6 +10,8 @@ end
 gem 'rails', '~> 5.1.1'
 # Support postgresql as a database for Active Record
 gem 'pg'
+# Support mysql as a database for Active Record
+gem 'mysql2', '~> 0.2.0'
 # Support sqlite3 as a database for Active Record
 gem 'sqlite3'
 # Support redis as a key-value store for Action Cable
